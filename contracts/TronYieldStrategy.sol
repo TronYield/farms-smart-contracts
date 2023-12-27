@@ -8,7 +8,7 @@ import '@openzeppelin/contracts/token/ERC20/IERC20.sol';
 
 import './interfaces/IToken.sol';
 
-contract DynoStrategy is Ownable {
+contract TronYieldStrategy is Ownable {
     address public dynomic;
     address public pair;
     IUniswapV2Router02 public router;

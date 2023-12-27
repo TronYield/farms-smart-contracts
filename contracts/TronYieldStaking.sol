@@ -11,14 +11,14 @@ import '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
 
 import './interfaces/IFeeStrategy.sol';
 
-// VoFiStaking is the master of VoFi. He can make VoFi and he is a fair guy.
+// TronYieldStaking is the master of TronYield. He can make TronYield and he is a fair guy.
 //
 // Note that it's ownable and the owner wields tremendous power. The ownership
-// will be transferred to a governance smart contract once VoFi is sufficiently
+// will be transferred to a governance smart contract once TronYield is sufficiently
 // distributed and the community can show to govern itself.
 //
 // Have fun reading it. Hopefully it's bug-free. God bless.
-contract VoFiStaking is Ownable, ReentrancyGuard {
+contract TronYieldStaking is Ownable, ReentrancyGuard {
   using SafeMath for uint256;
   using SafeERC20 for IERC20;
 
@@ -29,13 +29,13 @@ contract VoFiStaking is Ownable, ReentrancyGuard {
     uint256 rewardLockedUp;  // Reward locked up.
     uint256 nextHarvestUntil; // When can the user harvest again.
     //
-    // We do some fancy math here. Basically, any point in time, the amount of VoFis
+    // We do some fancy math here. Basically, any point in time, the amount of TronYields
     // entitled to a user but is pending to be distributed is:
     //
-    //   pending reward = (user.amount * pool.accVoFiPerShare) - user.rewardDebt
+    //   pending reward = (user.amount * pool.accTronYieldPerShare) - user.rewardDebt
     //
     // Whenever a user deposits or withdraws LP tokens to a pool. Here's what happens:
-    //   1. The pool's `accVoFiPerShare` (and `lastRewardTimestamp`) gets updated.
+    //   1. The pool's `accTronYieldPerShare` (and `lastRewardTimestamp`) gets updated.
     //   2. User receives the pending reward sent to his/her address.
     //   3. User's `amount` gets updated.
     //   4. User's `rewardDebt` gets updated.
@@ -44,24 +44,24 @@ contract VoFiStaking is Ownable, ReentrancyGuard {
   // Info of each pool.
   struct PoolInfo {
     IERC20 lpToken;           // Address of LP token contract.
-    uint256 allocPoint;       // How many allocation points assigned to this pool. vofiToken to distribute per block.
-    uint256 lastRewardTimestamp;  // Last timestamp that VoFi distribution occurs.
-    uint256 accVoFiPerShare;   // Accumulated VoFi per share, times 1e12. See below.
+    uint256 allocPoint;       // How many allocation points assigned to this pool. trydToken to distribute per block.
+    uint256 lastRewardTimestamp;  // Last timestamp that TronYield distribution occurs.
+    uint256 accTronYieldPerShare;   // Accumulated TronYield per share, times 1e12. See below.
     uint16 depositFeeBP;      // Deposit fee in basis points
     uint256 harvestInterval;  // Harvest interval in seconds
   }
 
-  // The VoFi TOKEN!
-  ERC20 public vofiToken;
+  // The TronYield TOKEN!
+  ERC20 public trydToken;
   // Buyback address
   address public buybackAddress;
   // Dev address.
   address public devAddress;
   // Deposit Fee address
   address public feeAddress;
-  // VoFi tokens created per second.
-  uint256 public vofiPerSec;
-  // Bonus muliplier for early vofiToken makers.
+  // TronYield tokens created per second.
+  uint256 public trydPerSec;
+  // Bonus muliplier for early trydToken makers.
   uint256 public constant BONUS_MULTIPLIER = 1;
   // Max harvest interval: 14 days.
   uint256 public constant MAXIMUM_HARVEST_INTERVAL = 14 days;
@@ -76,12 +76,12 @@ contract VoFiStaking is Ownable, ReentrancyGuard {
   mapping(uint256 => mapping(address => UserInfo)) public userInfo;
   // Total allocation points. Must be the sum of all allocation points in all pools.
   uint256 public totalAllocPoint = 0;
-  // The block number when VoFi mining starts.
+  // The block number when TronYield mining starts.
   uint256 public startTimestamp;
   // Total locked up rewards
   uint256 public totalLockedUpRewards;
 
-  // VoFi fee duduction strategy address.
+  // TronYield fee duduction strategy address.
   IFeeStrategy public feeStrategy;
 
   // Referral commission rate in basis points.
@@ -97,12 +97,12 @@ contract VoFiStaking is Ownable, ReentrancyGuard {
   event RewardLockedUp(address indexed user, uint256 indexed pid, uint256 amountLockedUp);
 
   constructor(
-    ERC20 _vofiToken,
+    ERC20 _trydToken,
     address _feeStrategy
   ) public {
-    vofiToken = _vofiToken;
+    trydToken = _trydToken;
     startTimestamp = block.timestamp;
-    vofiPerSec = 5 * 1e15;
+    trydPerSec = 5 * 1e15;
 
     devAddress = msg.sender;
     feeAddress = msg.sender;
@@ -129,13 +129,13 @@ contract VoFiStaking is Ownable, ReentrancyGuard {
       lpToken: _lpToken,
       allocPoint: _allocPoint,
       lastRewardTimestamp: lastRewardTimestamp,
-      accVoFiPerShare: 0,
+      accTronYieldPerShare: 0,
       depositFeeBP: _depositFeeBP,
       harvestInterval: _harvestInterval
     }));
   }
 
-  // Update the given pool's VoFi allocation point and deposit fee. Can only be called by the owner.
+  // Update the given pool's TronYield allocation point and deposit fee. Can only be called by the owner.
   function set(uint256 _pid, uint256 _allocPoint, uint16 _depositFeeBP, uint256 _harvestInterval, bool _withUpdate) external onlyOwner {
     require(_depositFeeBP <= 1000, 'set: exceed deposit fee allownance'); // deposit fee should be less than 10%
     require(_harvestInterval <= MAXIMUM_HARVEST_INTERVAL, 'set: invalid harvest interval');
@@ -153,22 +153,22 @@ contract VoFiStaking is Ownable, ReentrancyGuard {
     return _to.sub(_from).mul(BONUS_MULTIPLIER);
   }
 
-  // View function to see pending VoFi on frontend.
-  function pendingVoFi(uint256 _pid, address _user) external view returns (uint256) {
+  // View function to see pending TronYield on frontend.
+  function pendingTronYield(uint256 _pid, address _user) external view returns (uint256) {
     PoolInfo storage pool = poolInfo[_pid];
     UserInfo storage user = userInfo[_pid][_user];
-    uint256 accVoFiPerShare = pool.accVoFiPerShare;
+    uint256 accTronYieldPerShare = pool.accTronYieldPerShare;
     uint256 lpSupply = pool.lpToken.balanceOf(address(this));
     if (block.timestamp > pool.lastRewardTimestamp && lpSupply != 0) {
       uint256 multiplier = getMultiplier(pool.lastRewardTimestamp, block.timestamp);
-      uint256 tokenRewards = multiplier.mul(vofiPerSec).mul(pool.allocPoint).div(totalAllocPoint);
-      accVoFiPerShare = accVoFiPerShare.add(tokenRewards.mul(1e12).div(lpSupply));
+      uint256 tokenRewards = multiplier.mul(trydPerSec).mul(pool.allocPoint).div(totalAllocPoint);
+      accTronYieldPerShare = accTronYieldPerShare.add(tokenRewards.mul(1e12).div(lpSupply));
     }
-    uint256 pending = user.amount.mul(accVoFiPerShare).div(1e12).sub(user.rewardDebt);
+    uint256 pending = user.amount.mul(accTronYieldPerShare).div(1e12).sub(user.rewardDebt);
     return pending.add(user.rewardLockedUp);
   }
 
-  // View function to see if user can harvest VoFi.
+  // View function to see if user can harvest TronYield.
   function canHarvest(uint256 _pid, address _user) public view returns (bool) {
     UserInfo storage user = userInfo[_pid][_user];
     return block.timestamp >= user.nextHarvestUntil;
@@ -194,31 +194,31 @@ contract VoFiStaking is Ownable, ReentrancyGuard {
       return;
     }
     uint256 multiplier = getMultiplier(pool.lastRewardTimestamp, block.timestamp);
-    uint256 tokenRewards = multiplier.mul(vofiPerSec).mul(pool.allocPoint).div(totalAllocPoint);
-    pool.accVoFiPerShare = pool.accVoFiPerShare.add(tokenRewards.mul(1e12).div(lpSupply));
+    uint256 tokenRewards = multiplier.mul(trydPerSec).mul(pool.allocPoint).div(totalAllocPoint);
+    pool.accTronYieldPerShare = pool.accTronYieldPerShare.add(tokenRewards.mul(1e12).div(lpSupply));
     pool.lastRewardTimestamp = block.timestamp;
   }
 
-  // Deposit LP tokens to MasterChef for VoFi allocation.
+  // Deposit LP tokens to MasterChef for TronYield allocation.
   function deposit(uint256 _pid, uint256 _amount) external nonReentrant {
     PoolInfo storage pool = poolInfo[_pid];
     UserInfo storage user = userInfo[_pid][msg.sender];
     updatePool(_pid);
-    payOrLockupPendingVoFi(_pid);
+    payOrLockupPendingTronYield(_pid);
     if (_amount > 0) {
       pool.lpToken.safeTransferFrom(address(msg.sender), address(this), _amount);
-      // if (address(pool.lpToken) == address(vofiToken)) {
-      //     uint256 transferTax = _amount.mul(vofiToken.transferTaxRate()).div(10000);
+      // if (address(pool.lpToken) == address(trydToken)) {
+      //     uint256 transferTax = _amount.mul(trydToken.transferTaxRate()).div(10000);
       //     _amount = _amount.sub(transferTax);
       // }
       if (pool.depositFeeBP > 0) {
-        uint256 depositFeeRate = feeStrategy.getExactFarmDepositFeeBPForVoFiHolder(pool.depositFeeBP, msg.sender);
+        uint256 depositFeeRate = feeStrategy.getExactFarmDepositFeeBPForTronYieldHolder(pool.depositFeeBP, msg.sender);
         uint256 depositFee = _amount.mul(depositFeeRate).div(10000);
         uint256 buybackFee = depositFee.mul(BUYBACK_RATE).div(10000);
         uint256 devFee = depositFee.mul(DEV_FEE_RATE).div(10000);
         uint holdingFee = depositFee.mul(HOLDING_FEE_RATE).div(10000);
 
-        require(buybackFee.add(devFee).add(holdingFee) == depositFee, 'VoFi: fee distribution mismatch');
+        require(buybackFee.add(devFee).add(holdingFee) == depositFee, 'TronYield: fee distribution mismatch');
 
         pool.lpToken.safeTransfer(buybackAddress, buybackFee);
         pool.lpToken.safeTransfer(devAddress, devFee);
@@ -229,7 +229,7 @@ contract VoFiStaking is Ownable, ReentrancyGuard {
         user.amount = user.amount.add(_amount);
       }
     }
-    user.rewardDebt = user.amount.mul(pool.accVoFiPerShare).div(1e12);
+    user.rewardDebt = user.amount.mul(pool.accTronYieldPerShare).div(1e12);
     emit Deposit(msg.sender, _pid, _amount);
   }
 
@@ -239,12 +239,12 @@ contract VoFiStaking is Ownable, ReentrancyGuard {
     UserInfo storage user = userInfo[_pid][msg.sender];
     require(user.amount >= _amount, 'withdraw: not good');
     updatePool(_pid);
-    payOrLockupPendingVoFi(_pid);
+    payOrLockupPendingTronYield(_pid);
     if (_amount > 0) {
       user.amount = user.amount.sub(_amount);
       pool.lpToken.safeTransfer(address(msg.sender), _amount);
     }
-    user.rewardDebt = user.amount.mul(pool.accVoFiPerShare).div(1e12);
+    user.rewardDebt = user.amount.mul(pool.accTronYieldPerShare).div(1e12);
     emit Withdraw(msg.sender, _pid, _amount);
   }
 
@@ -261,8 +261,8 @@ contract VoFiStaking is Ownable, ReentrancyGuard {
     emit EmergencyWithdraw(msg.sender, _pid, amount);
   }
 
-  // Pay or lockup pending VoFi.
-  function payOrLockupPendingVoFi(uint256 _pid) internal {
+  // Pay or lockup pending TronYield.
+  function payOrLockupPendingTronYield(uint256 _pid) internal {
     PoolInfo storage pool = poolInfo[_pid];
     UserInfo storage user = userInfo[_pid][msg.sender];
 
@@ -270,7 +270,7 @@ contract VoFiStaking is Ownable, ReentrancyGuard {
       user.nextHarvestUntil = block.timestamp.add(pool.harvestInterval);
     }
 
-    uint256 pending = user.amount.mul(pool.accVoFiPerShare).div(1e12).sub(user.rewardDebt);
+    uint256 pending = user.amount.mul(pool.accTronYieldPerShare).div(1e12).sub(user.rewardDebt);
     if (canHarvest(_pid, msg.sender)) {
       if (pending > 0 || user.rewardLockedUp > 0) {
         uint256 totalRewards = pending.add(user.rewardLockedUp);
@@ -290,13 +290,13 @@ contract VoFiStaking is Ownable, ReentrancyGuard {
     }
   }
 
-  // Safe vofiToken transfer function, just in case if rounding error causes pool to not have enough VoFi.
+  // Safe trydToken transfer function, just in case if rounding error causes pool to not have enough TronYield.
   function safeTokenTransfer(address _to, uint256 _amount) internal {
-    uint256 tokenBal = vofiToken.balanceOf(address(this));
+    uint256 tokenBal = trydToken.balanceOf(address(this));
     if (_amount > tokenBal) {
-      vofiToken.transfer(_to, tokenBal);
+      trydToken.transfer(_to, tokenBal);
     } else {
-      vofiToken.transfer(_to, _amount);
+      trydToken.transfer(_to, _amount);
     }
   }
 
@@ -320,10 +320,10 @@ contract VoFiStaking is Ownable, ReentrancyGuard {
   }
 
   // Pancake has to add hidden dummy pools in order to alter the emission, here we make it simple and transparent to all.
-  function updateEmissionRate(uint256 _vofiPerSec) external onlyOwner {
+  function updateEmissionRate(uint256 _trydPerSec) external onlyOwner {
     massUpdatePools();
-    emit EmissionRateUpdated(msg.sender, vofiPerSec, _vofiPerSec);
-    vofiPerSec = _vofiPerSec;
+    emit EmissionRateUpdated(msg.sender, trydPerSec, _trydPerSec);
+    trydPerSec = _trydPerSec;
   }
 
   // Update referral commission rate by the owner
